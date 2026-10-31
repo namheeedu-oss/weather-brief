@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>원주캠퍼스 등굣길 브리핑</title>
+    <style>
+        :root {
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --accent-color: #4a90e2;
+            --danger-color: #e74c3c;
+            --border-radius: 16px;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+            box-sizing: border-box;
+            margin: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 25px;
+            color: var(--text-main);
+        }
+
+        /* 상태 메세지 (로딩, 에러) */
+        .status-message {
+            text-align: center;
+            font-size: 1.1rem;
+            padding: 40px 0;
+            color: var(--text-sub);
+        }
+
+        /* 챙길 것 3줄 (크게) */
+        .recommendations {
+            margin-bottom: 30px;
+            display: none; /* 데이터 로드 전 숨김 */
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .recommendation-item {
+            font-size: 1.4rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            border-radius: 12px;
+            background-color: #f8f9fa;
+        }
+
+        .item-yes {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+
+        .item-no {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        /* 세부 정보 수치들 */
+        .details-grid {
+            display: none; /* 데이터 로드 전 숨김 */
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .detail-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .detail-label {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        /* 갱신 시각 및 출처 */
+        .footer-info {
+            display: none;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #999;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+
+        /* 에러 상태 버튼 */
+        .retry-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .retry-btn:hover {
+            background-color: #357abd;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🎒 원주캠퍼스 등굣길</h1>
+
+        <!-- 로딩 상태 -->
+        <div id="loading" class="status-message">
+            데이터를 불러오는 중입니다...
+        </div>
+
+        <!-- 에러 상태 -->
+        <div id="error" class="status-message" style="display: none;">
+            데이터를 불러오지 못했습니다<br>
+            <button class="retry-btn" onclick="fetchData()">다시 시도</button>
+        </div>
+
+        <!-- 추천(챙길 것) 섹션 -->
+        <div id="recommendations" class="recommendations">
+            <div id="rec-umbrella" class="recommendation-item"></div>
+            <div id="rec-clothes" class="recommendation-item"></div>
+            <div id="rec-mask" class="recommendation-item"></div>
+        </div>
+
+        <!-- 세부 수치 섹션 -->
+        <div id="details" class="details-grid">
+            <div class="detail-card">
+                <div class="detail-label">현재 기온</div>
+                <div id="val-temp" class="detail-value">-</div>
+            </div>
+            <div class="detail-card">
+                <div class="detail-label">체감 온도</div>
+                <div id="val-app-temp" class="detail-value">-</div>
+            </div>
+            <div class="detail-card">
+                <div class="detail-label">강수 확률 (9~18시)</div>
+                <div id="val-rain" class="detail-value">-</div>
+            </div>
+            <div class="detail-card">
+                <div class="detail-label">미세먼지 (PM10/2.5)</div>
+                <div id="val-dust" class="detail-value">-</div>
+            </div>
+        </div>
+
+        <!-- 하단 출처 및 갱신 시간 -->
+        <div id="footer-info" class="footer-info">
+            마지막 갱신: <span id="last-updated">-</span><br>
+            Weather data by Open-Meteo.com · Air quality: CAMS
+        </div>
+    </div>
+
+    <script>
+        const weatherApiUrl = 'https://api.open-meteo.com/v1/forecast?latitude=37.30&longitude=127.92&current=temperature_2m,apparent_temperature,weather_code&hourly=precipitation_probability&timezone=Asia/Seoul&forecast_days=1';
+        const airQualityApiUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=37.30&longitude=127.92&current=pm10,pm2_5&timezone=Asia/Seoul';
+
+        const domElements = {
+            loading: document.getElementById('loading'),
+            error: document.getElementById('error'),
+            recommendations: document.getElementById('recommendations'),
+            details: document.getElementById('details'),
+            footerInfo: document.getElementById('footer-info'),
+            
+            recUmbrella: document.getElementById('rec-umbrella'),
+            recClothes: document.getElementById('rec-clothes'),
+            recMask: document.getElementById('rec-mask'),
+            
+            valTemp: document.getElementById('val-temp'),
+            valAppTemp: document.getElementById('val-app-temp'),
+            valRain: document.getElementById('val-rain'),
+            valDust: document.getElementById('val-dust'),
+            lastUpdated: document.getElementById('last-updated')
+        };
+
+        function setDisplay(element, displayType) {
+            element.style.display = displayType;
+        }
+
+        async function fetchData() {
+            // UI 초기화
+            setDisplay(domElements.loading, 'block');
+            setDisplay(domElements.error, 'none');
+            setDisplay(domElements.recommendations, 'none');
+            setDisplay(domElements.details, 'none');
+            setDisplay(domElements.footerInfo, 'none');
+
+            try {
+                const [weatherRes, airRes] = await Promise.all([
+                    fetch(weatherApiUrl),
+                    fetch(airQualityApiUrl)
+                ]);
+
+                if (!weatherRes.ok || !airRes.ok) {
+                    throw new Error('API 연동 실패');
+                }
+
+                const weatherData = await weatherRes.json();
+                const airData = await airRes.json();
+
+                processAndDisplayData(weatherData, airData);
+            } catch (error) {
+                console.error("데이터 패치 오류:", error);
+                setDisplay(domElements.loading, 'none');
+                setDisplay(domElements.error, 'block');
+            }
+        }
+
+        function processAndDisplayData(weather, air) {
+            // 1. 데이터 추출
+            const currentTemp = weather.current.temperature_2m;
+            const apparentTemp = weather.current.apparent_temperature;
+            
+            // 9시부터 18시까지의 강수확률 최댓값 (배열 인덱스 9~18)
+            const rainProbs9to18 = weather.hourly.precipitation_probability.slice(9, 19);
+            const maxRainProb = Math.max(...rainProbs9to18);
+
+            const pm10 = air.current.pm10;
+            const pm25 = air.current.pm2_5;
+
+            // 2. 판단 규칙 적용
+            const needUmbrella = maxRainProb >= 50;
+            const needWinterClothes = apparentTemp <= 10;
+            const needMask = pm10 >= 81 || pm25 >= 36;
+
+            // 3. UI 렌더링 - 챙길 것 세 줄 (크게)
+            renderRecommendation(domElements.recUmbrella, needUmbrella, "☂️ 우산 챙기기", "☀️ 우산 불필요");
+            renderRecommendation(domElements.recClothes, needWinterClothes, "🧥 겉옷(겨울옷) 챙기기", "👕 가벼운 옷차림");
+            renderRecommendation(domElements.recMask, needMask, "😷 마스크 챙기기", "🌿 마스크 불필요 (공기 맑음)");
+
+            // 4. UI 렌더링 - 세부 수치
+            domElements.valTemp.innerText = `${currentTemp.toFixed(1)}°C`;
+            domElements.valAppTemp.innerText = `${apparentTemp.toFixed(1)}°C`;
+            domElements.valRain.innerText = `최고 ${maxRainProb}%`;
+            domElements.valDust.innerText = `${pm10} / ${pm25}`;
+            
+            // 5. 갱신 시간
+            const now = new Date();
+            domElements.lastUpdated.innerText = `${now.getHours()}시 ${now.getMinutes()}분`;
+
+            // 성공 시 화면 표시 전환
+            setDisplay(domElements.loading, 'none');
+            setDisplay(domElements.recommendations, 'flex');
+            setDisplay(domElements.details, 'grid');
+            setDisplay(domElements.footerInfo, 'block');
+        }
+
+        function renderRecommendation(element, condition, trueText, falseText) {
+            if (condition) {
+                element.innerText = trueText;
+                element.className = "recommendation-item item-yes";
+            } else {
+                element.innerText = falseText;
+                element.className = "recommendation-item item-no";
+            }
+        }
+
+        // 초기 실행
+        fetchData();
+    </script>
+</body>
+</html>
